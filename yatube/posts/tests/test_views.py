@@ -1,12 +1,14 @@
 from http import HTTPStatus
+from random import randint
 
 from django import forms
 from django.core.cache import cache
-from django.test import Client, TestCase
+from django.test import TestCase
 from django.urls import reverse
 
-from posts.models import Follow, Post, User
-from yatube.utils import InitMixin
+from core.mixins import InitMixin
+from posts.models import Follow, Group, Post, User
+from yatube.settings import POSTS_PER_PAGE
 
 
 class ViewsTest(InitMixin, TestCase):
@@ -89,22 +91,28 @@ class ViewsTest(InitMixin, TestCase):
     def test_not_in_group_context(self):
         """Шаблон 'posts:group_posts' сформирован с правильным контекстом -
         без поста в неродной группе."""
+        group_new = Group.objects.create(
+            title=self.fake.sentence(nb_words=5),
+            slug=('_').join(self.fake.words(nb=5)),
+            description=self.fake.sentence(nb_words=15)
+        )
         response = (self.author_post.get(
             reverse('posts:group_posts',
-                    kwargs={'slug': self.group_two.slug})))
+                    kwargs={'slug': group_new.slug})))
         self.assertFalse(response.context['page_obj'])
         self.assertEqual(response.context['page_obj'].paginator.count, 0)
 
     def test_paginator(self):
         """Проверяем Paginator, что на с сраницах со списками постов
-        на первых страницах 10 постов и на вторых - по 3."""
+        правильное количество постов."""
+        add_post = randint(1, POSTS_PER_PAGE)
         objs = [
             Post(
                 text=self.fake.sentence(nb_words=10),
                 author=self.author,
                 group=self.group
             )
-            for _ in range(12)
+            for _ in range(POSTS_PER_PAGE + add_post - 1)
         ]
         Post.objects.bulk_create(objs)
         reverse_list = {
@@ -115,13 +123,13 @@ class ViewsTest(InitMixin, TestCase):
         }
         for reverse_name in reverse_list:
             with self.subTest(reverse_name=reverse_name):
-                response = self.unauth_client.get(reverse_name)
+                response = self.client.get(reverse_name)
                 count = len(response.context.get('page_obj').object_list)
-                self.assertEqual(count, 10)
-                response = self.unauth_client.get(
+                self.assertEqual(count, POSTS_PER_PAGE)
+                response = self.client.get(
                     reverse_name, data={'page': 2})
                 count = len(response.context.get('page_obj').object_list)
-                self.assertEqual(count, 3)
+                self.assertEqual(count, add_post)
 
     def test_post_with_img_context(self):
         """При выводе поста с картинкой изображение передаётся в context."""
@@ -134,59 +142,70 @@ class ViewsTest(InitMixin, TestCase):
         )
         for reverse_name in reverses:
             with self.subTest(reverse_name=reverse_name):
-                response = self.unauth_client.get(reverse_name)
+                response = self.client.get(reverse_name)
                 self.assertEqual(
                     response.context.get('post').image, self.post.image)
 
-    def test_follow_unfollow(self):
+    def test_follow(self):
         """"Авторизованный пользователь может подписываться
-        на других пользователей и удалять их из подписок."""
-        count = Follow.objects.filter(
+        на других пользователей."""
+        count_start = Follow.objects.filter(
             user=self.auth_user, author=self.author).count()
-        self.assertEqual(count, 0)
         reverse_name = reverse('posts:profile_follow',
                                kwargs={'username': self.author.username})
         self.auth_client.get(reverse_name)
-        count = Follow.objects.filter(
+        count_end = Follow.objects.filter(
             user=self.auth_user, author=self.author).count()
-        self.assertEqual(count, 1)
+        self.assertEqual(count_end - count_start, 1)
+
+    def test_unfollow(self):
+        """"Авторизованный пользователь может отписываться
+        от других пользователей."""
+        reverse_name = reverse('posts:profile_follow',
+                               kwargs={'username': self.author.username})
+        self.auth_client.get(reverse_name)
+        count_start = Follow.objects.filter(
+            user=self.auth_user, author=self.author).count()
         reverse_name = reverse('posts:profile_unfollow',
                                kwargs={'username': self.author.username})
         self.auth_client.get(reverse_name)
-        count = Follow.objects.filter(
+        count_end = Follow.objects.filter(
             user=self.auth_user, author=self.author).count()
-        self.assertEqual(count, 0)
+        self.assertEqual(count_end - count_start, -1)
 
     def test_following_post(self):
         """"Новая запись пользователя появляется в ленте тех,кто
-        на него подписан и не появляется в ленте тех, кто не подписан."""
-        reverse_name = reverse('posts:profile_follow',
-                               kwargs={'username': self.author.username})
-        self.auth_client.get(reverse_name)
-        user_two = User.objects.create_user(username='user_two')
-        user_two_client = Client()
-        user_two_client.force_login(user_two)
-        post = Post.objects.create(
-            text=self.fake.sentence(nb_words=10),
-            author=self.author,
-        )
+        на него подписан."""
+        Follow.objects.create(author=self.author, user=self.auth_user)
         content_follow = str(self.auth_client.get(
             reverse('posts:follow_index')).content)
-        self.assertIn(post.text, content_follow)
-        content_no_follow = str(user_two_client.get(
+        self.assertIn(self.post.text, content_follow)
+
+    def test_unfollowing_post(self):
+        """"Новая запись пользователя не появляется в ленте тех,
+        кто не подписан."""
+        content_no_follow = str(self.auth_client.get(
             reverse('posts:follow_index')).content)
-        self.assertNotIn(post.text, content_no_follow)
+        self.assertNotIn(self.post.text, content_no_follow)
 
 
-class CacheTest(InitMixin, TestCase):
+class CacheTest(TestCase):
+
+    def setUp(self):
+        cache.clear()
 
     def test_cache(self):
         """"Кеширование главной страницы."""
-        content = str(self.unauth_client.get(reverse('posts:index')).content)
-        self.assertIn(self.post.text, content)
-        Post.objects.get(pk=self.post.id).delete()
-        content = str(self.unauth_client.get(reverse('posts:index')).content)
-        self.assertIn(self.post.text, content)
+        author = User.objects.create_user(username='author')
+        post = Post.objects.create(
+            text='abrakadabra',
+            author=author,
+        )
+        content = str(self.client.get(reverse('posts:index')).content)
+        self.assertIn(post.text, content)
+        post.delete()
+        content = str(self.client.get(reverse('posts:index')).content)
+        self.assertIn(post.text, content)
         cache.clear()
-        content = str(self.unauth_client.get(reverse('posts:index')).content)
-        self.assertNotIn(self.post.text, content)
+        content = str(self.client.get(reverse('posts:index')).content)
+        self.assertNotIn(post.text, content)

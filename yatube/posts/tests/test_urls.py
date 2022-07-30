@@ -3,7 +3,7 @@ from http import HTTPStatus
 from django.test import TestCase
 from django.urls import reverse
 
-from yatube.utils import InitMixin
+from core.mixins import InitMixin
 
 
 class URLTest(InitMixin, TestCase):
@@ -19,7 +19,7 @@ class URLTest(InitMixin, TestCase):
         ]
         for address in addresses:
             with self.subTest(address=address):
-                response = self.unauth_client.get(address)
+                response = self.client.get(address)
                 self.assertEqual(HTTPStatus.OK, response.status_code)
 
     def test_url_authorized_client_template(self):

@@ -2,6 +2,8 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.cache import cache_page
 
+from yatube.settings import CACHE_TIME
+
 from .forms import CommentForm, PostForm
 from .models import Follow, Group, Post, User
 from .utils import get_paginator
@@ -20,7 +22,7 @@ def post_create(request):
                       context=context)
     post = form.save(commit=False)
     post.author = request.user
-    post.save()
+    form.save()
     return redirect('posts:profile',
                     username=request.user.username)
 
@@ -47,9 +49,9 @@ def post_edit(request, post_id):
                     post_id=post_id)
 
 
-@cache_page(20, key_prefix='index_page')
+@cache_page(CACHE_TIME, key_prefix='index_page')
 def index(request):
-    posts = Post.objects.select_related('author')
+    posts = Post.objects.select_related('author', 'group')
     page_obj = get_paginator(request, posts)
     context = {
         'page_obj': page_obj,
@@ -59,7 +61,7 @@ def index(request):
 
 def group_posts(request, slug):
     group = get_object_or_404(Group, slug=slug)
-    posts = group.posts.select_related('author')
+    posts = group.posts.select_related('author', 'group')
     page_obj = get_paginator(request, posts)
     context = {
         'group': group,
@@ -73,10 +75,10 @@ def profile(request, username):
     posts = Post.objects.filter(author=author)
     page_obj = get_paginator(request, posts)
     user = request.user
-    following = True
-    if request.user.is_authenticated:
-        if not Follow.objects.filter(user=user, author=author):
-            following = False
+    following = (
+        request.user.is_authenticated and not Follow.objects.filter(
+            user=user, author=author).exists()
+    )
     context = {
         'page_obj': page_obj,
         'author': author,
@@ -87,7 +89,7 @@ def profile(request, username):
 
 def post_detail(request, post_id):
     post = get_object_or_404(Post, pk=post_id)
-    comments = post.comments.all()
+    comments = post.comments.select_related('author')
     form = CommentForm(request.POST or None)
     context = {
         'post': post,
@@ -105,15 +107,15 @@ def add_comment(request, post_id):
         comment = form.save(commit=False)
         comment.author = request.user
         comment.post = post
-        comment.save()
+        form.save()
     return redirect('posts:post_detail', post_id=post_id)
 
 
 @login_required
 def follow_index(request):
     user = request.user
-    authors = user.follower.values_list("author", flat=True)
-    posts = Post.objects.filter(author__in=authors)
+    posts = Post.objects.filter(
+        author__in=user.follower.values_list("author", flat=True))
     page_obj = get_paginator(request, posts)
     context = {
         'page_obj': page_obj,
@@ -125,8 +127,8 @@ def follow_index(request):
 def profile_follow(request, username):
     user = request.user
     author = get_object_or_404(User, username=username)
-    if not Follow.objects.filter(user=user, author=author) and user != author:
-        Follow.objects.create(user=user, author=author)
+    if user != author:
+        Follow.objects.get_or_create(user=user, author=author)
     return redirect('posts:profile', username=username)
 
 
@@ -134,5 +136,5 @@ def profile_follow(request, username):
 def profile_unfollow(request, username):
     user = request.user
     author = get_object_or_404(User, username=username)
-    Follow.objects.get(user=user, author=author).delete()
+    Follow.objects.filter(user=user, author=author).delete()
     return redirect('posts:profile', username=username)

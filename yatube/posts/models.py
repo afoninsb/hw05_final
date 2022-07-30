@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.db import models
 
 from core.models import CreatedModel
+from yatube.settings import SHORT_TEXT
 
 User = get_user_model()
 
@@ -20,14 +21,11 @@ class Post(CreatedModel):
         'Текст поста',
         help_text='Введите текст поста'
     )
-    pub_date = models.DateTimeField(
-        'Дата публикации',
-        auto_now_add=True
-    )
     author = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        verbose_name='Автор'
+        verbose_name='Автор',
+        related_name='posts',
     )
     group = models.ForeignKey(
         Group,
@@ -50,7 +48,7 @@ class Post(CreatedModel):
         verbose_name_plural = 'Посты'
 
     def __str__(self):
-        return self.text[:15]
+        return self.text[:SHORT_TEXT]
 
 
 class Comment(CreatedModel):
@@ -76,7 +74,7 @@ class Comment(CreatedModel):
         verbose_name_plural = 'Комментарии'
 
     def __str__(self):
-        return self.text[:15]
+        return self.text[:SHORT_TEXT]
 
 
 class Follow(models.Model):
@@ -92,3 +90,9 @@ class Follow(models.Model):
         on_delete=models.CASCADE,
         verbose_name='following'
     )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'author'],
+                                    name='unique follow')
+        ]

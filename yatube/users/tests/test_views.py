@@ -1,17 +1,21 @@
 from http import HTTPStatus
 
 from django import forms
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.urls import reverse
+from faker import Faker
 
-from yatube.utils import InitMixin
+from posts.models import User
 
 
-class ViewsTest(InitMixin, TestCase):
+class ViewsTest(TestCase):
 
     def test_pages_uses_correct_template_auth(self):
         """URL-адрес использует соответствующий шаблон
         для авторизованного пользователя."""
+        auth_user = User.objects.create_user(username='user')
+        auth_client = Client()
+        auth_client.force_login(auth_user)
         templates_pages_names = {
             reverse('users:password_change_done'):
                 'users/password_change_done.html',
@@ -21,13 +25,14 @@ class ViewsTest(InitMixin, TestCase):
         }
         for reverse_name, template in templates_pages_names.items():
             with self.subTest(reverse_name=reverse_name):
-                response = self.auth_client.get(reverse_name)
+                response = auth_client.get(reverse_name)
                 self.assertEqual(HTTPStatus.OK, response.status_code)
                 self.assertTemplateUsed(response, template)
 
     def test_pages_uses_correct_template_unauth(self):
         """URL-адрес использует соответствующий шаблон
         для неавторизованного пользователя"""
+        fake = Faker()
         templates_pages_names = {
             reverse('users:signup'): 'users/signup.html',
             reverse('users:login'): 'users/login.html',
@@ -36,15 +41,15 @@ class ViewsTest(InitMixin, TestCase):
             reverse('users:password_reset_form'):
                 'users/password_reset_form.html',
             reverse('users:password_reset_confirm',
-                    kwargs={'uidb64': self.fake.pystr(max_chars=2),
-                            'token': self.fake.pystr(max_chars=20)}):
+                    kwargs={'uidb64': fake.pystr(max_chars=2),
+                            'token': fake.pystr(max_chars=20)}):
                 'users/password_reset_confirm.html',
             reverse('users:password_reset_complete'):
                 'users/password_reset_complete.html',
         }
         for reverse_name, template in templates_pages_names.items():
             with self.subTest(reverse_name=reverse_name):
-                response = self.unauth_client.get(reverse_name)
+                response = self.client.get(reverse_name)
                 self.assertTemplateUsed(response, template)
                 self.assertEqual(HTTPStatus.OK, response.status_code)
 
@@ -59,7 +64,7 @@ class ViewsTest(InitMixin, TestCase):
             'password1': forms.fields.CharField,
             'password2': forms.fields.CharField,
         }
-        response = self.unauth_client.get(reverse('users:signup'))
+        response = self.client.get(reverse('users:signup'))
         for value, expected in form_fields.items():
             with self.subTest(value=value):
                 form_field = response.context.get(

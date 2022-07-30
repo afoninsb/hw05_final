@@ -1,6 +1,7 @@
 from django.test import TestCase
 
-from yatube.utils import InitMixin
+from core.mixins import InitMixin
+from yatube.settings import SHORT_TEXT
 
 
 class ModelTest(InitMixin, TestCase):
@@ -9,7 +10,7 @@ class ModelTest(InitMixin, TestCase):
         """Проверяем __str__ моделей."""
         data = {
             self.group: self.group.title,
-            self.post: self.post.text[:15]
+            self.post: self.post.text[:SHORT_TEXT]
         }
         for model_name, model_str in data.items():
             with self.subTest(self):
@@ -22,7 +23,7 @@ class ModelTest(InitMixin, TestCase):
             self.post._meta.get_field('group').help_text: 'Выберите группу',
             self.post._meta.get_field('text').verbose_name: 'Текст поста',
             self.post._meta.get_field('pub_date').verbose_name:
-                'Дата публикации',
+                'Дата создания',
             self.post._meta.get_field('author').verbose_name: 'Автор',
             self.post._meta.get_field('group').verbose_name: 'Группа'
         }

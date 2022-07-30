@@ -136,3 +136,5 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 POSTS_PER_PAGE = 10
+CACHE_TIME = 20
+SHORT_TEXT = 15

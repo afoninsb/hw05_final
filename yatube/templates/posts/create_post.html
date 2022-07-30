@@ -16,7 +16,6 @@
           {% endif %}
         </div>
         <div class="card-body">
-          {% load user_filters %}
           {% include 'includes/echo_error.html' %}
           <form method="post" action="" enctype="multipart/form-data">{% csrf_token %}
             {% for field in form %}
