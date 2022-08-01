@@ -161,9 +161,7 @@ class ViewsTest(InitMixin, TestCase):
     def test_unfollow(self):
         """"Авторизованный пользователь может отписываться
         от других пользователей."""
-        reverse_name = reverse('posts:profile_follow',
-                               kwargs={'username': self.author.username})
-        self.auth_client.get(reverse_name)
+        Follow.objects.create(author=self.author, user=self.auth_user)
         count_start = Follow.objects.filter(
             user=self.auth_user, author=self.author).count()
         reverse_name = reverse('posts:profile_unfollow',
@@ -176,17 +174,23 @@ class ViewsTest(InitMixin, TestCase):
     def test_following_post(self):
         """"Новая запись пользователя появляется в ленте тех,кто
         на него подписан."""
-        Follow.objects.create(author=self.author, user=self.auth_user)
-        content_follow = str(self.auth_client.get(
-            reverse('posts:follow_index')).content)
-        self.assertIn(self.post.text, content_follow)
+        following = Follow.objects.create(
+            author=self.author, user=self.auth_user)
+        response = self.auth_client.get(reverse('posts:follow_index'))
+        self.assertEqual(response.context.get('post'), self.post)
+        self.assertEqual(
+            response.context.get('post').author, following.author)
 
     def test_unfollowing_post(self):
         """"Новая запись пользователя не появляется в ленте тех,
         кто не подписан."""
-        content_no_follow = str(self.auth_client.get(
-            reverse('posts:follow_index')).content)
-        self.assertNotIn(self.post.text, content_no_follow)
+        author = User.objects.create_user(username='new_author')
+        post = Post.objects.create(
+            text=self.fake.sentence(nb_words=10),
+            author=author,
+        )
+        response = self.auth_client.get(reverse('posts:follow_index'))
+        self.assertNotEqual(response.context.get('post'), post)
 
 
 class CacheTest(TestCase):

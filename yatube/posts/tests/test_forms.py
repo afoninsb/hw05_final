@@ -55,7 +55,7 @@ class FormTest(InitMixin, TestCase):
         count_start = Post.objects.count()
         group_new = Group.objects.create(
             title=self.fake.sentence(nb_words=5),
-            slug=('_').join(self.fake.words(nb=5)),
+            slug='_'.join(self.fake.words(nb=5)),
             description=self.fake.sentence(nb_words=15)
         )
         url = reverse(
@@ -79,12 +79,15 @@ class FormTest(InitMixin, TestCase):
         """Комментарий от неавторизованного пользователя не попадает в базу."""
         count_start = Comment.objects.count()
         url = reverse('posts:add_comment', kwargs={'post_id': self.post.id})
+        redirect = reverse('users:login')
+        redirect_url = f"{redirect}?next={url}"
         data_comment = {
             'text': self.fake.sentence(nb_words=10),
         }
-        self.client.post(url, data=data_comment)
+        response = self.client.post(url, data=data_comment)
         count_end = Comment.objects.count()
         self.assertEqual(count_start, count_end)
+        self.assertRedirects(response, redirect_url)
 
     def test_auth_comments(self):
         """Комментарий от авторизованного пользователя сохраняется в базе."""
@@ -110,7 +113,7 @@ class FormTest(InitMixin, TestCase):
         self.assertEqual(
             response.context.get('comments')[0], comment)
 
-    def test_create_post(self):
+    def test_not_image(self):
         """Если в качестве image в форму передать файл, не являющийся
         изображением, то происходит ошибка формы."""
         count_start = Post.objects.count()

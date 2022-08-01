@@ -1,8 +1,7 @@
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.cache import cache_page
-
-from yatube.settings import CACHE_TIME
 
 from .forms import CommentForm, PostForm
 from .models import Follow, Group, Post, User
@@ -49,7 +48,7 @@ def post_edit(request, post_id):
                     post_id=post_id)
 
 
-@cache_page(CACHE_TIME, key_prefix='index_page')
+@cache_page(settings.CACHE_TIME, key_prefix='index_page')
 def index(request):
     posts = Post.objects.select_related('author', 'group')
     page_obj = get_paginator(request, posts)
@@ -72,7 +71,7 @@ def group_posts(request, slug):
 
 def profile(request, username):
     author = get_object_or_404(User, username=username)
-    posts = Post.objects.filter(author=author)
+    posts = Post.objects.select_related('author').filter(author=author)
     page_obj = get_paginator(request, posts)
     user = request.user
     following = (
@@ -114,8 +113,8 @@ def add_comment(request, post_id):
 @login_required
 def follow_index(request):
     user = request.user
-    posts = Post.objects.filter(
-        author__in=user.follower.values_list("author", flat=True))
+    posts = Post.objects.select_related('author').filter(
+        author__following__user=user)
     page_obj = get_paginator(request, posts)
     context = {
         'page_obj': page_obj,
