@@ -2,22 +2,22 @@ from http import HTTPStatus
 from random import randint
 
 from django import forms
+from django.conf import settings
 from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
 
 from core.mixins import InitMixin
-from posts.models import Follow, Group, Post, User
-from yatube.settings import POSTS_PER_PAGE
+from posts.models import Comment, Follow, Group, Post, User
 
 
 class ViewsTest(InitMixin, TestCase):
 
-    def test_pages_uses_correct_template(self):
-        """URL-адрес использует соответствующий шаблон."""
+    def test_public_pages_uses_correct_template(self):
+        """URL-адрес публичных страниц использует соответствующий шаблон
+        для неавторизованного клиента."""
         templates_pages_names = {
             reverse('posts:index'): 'posts/index.html',
-            reverse('posts:post_create'): 'posts/create_post.html',
             reverse('posts:group_posts', kwargs={'slug': self.group.slug}):
                 'posts/group_list.html',
             reverse('posts:profile',
@@ -25,6 +25,18 @@ class ViewsTest(InitMixin, TestCase):
                 'posts/profile.html',
             reverse('posts:post_detail', kwargs={'post_id': self.post.id}):
                 'posts/post_detail.html',
+        }
+        for reverse_name, template in templates_pages_names.items():
+            with self.subTest(reverse_name=reverse_name):
+                response = self.client.get(reverse_name)
+                self.assertTemplateUsed(response, template)
+                self.assertEqual(HTTPStatus.OK, response.status_code)
+
+    def test_private_pages_uses_correct_template(self):
+        """URL-адрес приватных страниц использует соответствующий шаблон
+        для автора."""
+        templates_pages_names = {
+            reverse('posts:post_create'): 'posts/create_post.html',
             reverse('posts:post_edit', kwargs={'post_id': self.post.id}):
                 'posts/create_post.html',
         }
@@ -43,7 +55,7 @@ class ViewsTest(InitMixin, TestCase):
         ]
         for reverse_item in reverse_list:
             with self.subTest(reverse_item=reverse_item):
-                response = self.author_post.get(reverse_item)
+                response = self.client.get(reverse_item)
                 first_object = response.context['page_obj'][0]
                 self.assertEqual(
                     first_object.text, self.post.text)
@@ -82,7 +94,7 @@ class ViewsTest(InitMixin, TestCase):
 
     def test_profile_context(self):
         """Шаблон 'posts:profile' сформирован с правильным контекстом."""
-        response = (self.author_post.get(
+        response = (self.client.get(
             reverse('posts:profile',
                     kwargs={'username': self.author.username})))
         self.assertEqual(response.context['page_obj'][0].text, self.post.text)
@@ -93,7 +105,7 @@ class ViewsTest(InitMixin, TestCase):
         без поста в неродной группе."""
         group_new = Group.objects.create(
             title=self.fake.sentence(nb_words=5),
-            slug=('_').join(self.fake.words(nb=5)),
+            slug='_'.join(self.fake.words(nb=5)),
             description=self.fake.sentence(nb_words=15)
         )
         response = (self.author_post.get(
@@ -105,14 +117,14 @@ class ViewsTest(InitMixin, TestCase):
     def test_paginator(self):
         """Проверяем Paginator, что на с сраницах со списками постов
         правильное количество постов."""
-        add_post = randint(1, POSTS_PER_PAGE)
+        add_post = randint(1, settings.POSTS_PER_PAGE)
         objs = [
             Post(
                 text=self.fake.sentence(nb_words=10),
                 author=self.author,
                 group=self.group
             )
-            for _ in range(POSTS_PER_PAGE + add_post - 1)
+            for _ in range(settings.POSTS_PER_PAGE + add_post - 1)
         ]
         Post.objects.bulk_create(objs)
         reverse_list = {
@@ -125,7 +137,7 @@ class ViewsTest(InitMixin, TestCase):
             with self.subTest(reverse_name=reverse_name):
                 response = self.client.get(reverse_name)
                 count = len(response.context.get('page_obj').object_list)
-                self.assertEqual(count, POSTS_PER_PAGE)
+                self.assertEqual(count, settings.POSTS_PER_PAGE)
                 response = self.client.get(
                     reverse_name, data={'page': 2})
                 count = len(response.context.get('page_obj').object_list)
@@ -191,6 +203,19 @@ class ViewsTest(InitMixin, TestCase):
         )
         response = self.auth_client.get(reverse('posts:follow_index'))
         self.assertNotEqual(response.context.get('post'), post)
+
+    def test_valid_comments(self):
+        """После успешной отправки комментарий появляется на странице поста."""
+        comment = Comment.objects.create(
+            post=self.post,
+            author=self.author,
+            text=self.fake.sentence(nb_words=10)
+        )
+        response = self.client.get(
+            reverse('posts:post_detail', kwargs={'post_id': self.post.id})
+        )
+        self.assertEqual(
+            response.context.get('comments')[0], comment)
 
 
 class CacheTest(TestCase):

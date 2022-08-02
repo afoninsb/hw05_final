@@ -1,7 +1,7 @@
+from django.conf import settings
 from django.test import TestCase
 
 from core.mixins import InitMixin
-from yatube.settings import SHORT_TEXT
 
 
 class ModelTest(InitMixin, TestCase):
@@ -10,7 +10,7 @@ class ModelTest(InitMixin, TestCase):
         """Проверяем __str__ моделей."""
         data = {
             self.group: self.group.title,
-            self.post: self.post.text[:SHORT_TEXT]
+            self.post: self.post.text[:settings.SHORT_TEXT]
         }
         for model_name, model_str in data.items():
             with self.subTest(self):

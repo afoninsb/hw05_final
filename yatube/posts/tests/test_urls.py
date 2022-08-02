@@ -37,7 +37,7 @@ class URLTest(InitMixin, TestCase):
         }
         for address, template in url_templates.items():
             with self.subTest(address=address):
-                response = self.auth_client.get(address)
+                response = self.client.get(address)
                 self.assertTemplateUsed(response, template)
 
     def test_url_author_post_template(self):
@@ -69,7 +69,7 @@ class URLTest(InitMixin, TestCase):
     def test_not_accessibility_authorized(self):
         """Авторизованный пользователь, не являющийся автором поста,
         при переходе на страницу редактирования поста, перенаправляется
-        на страницу своего профиля."""
+        на другую страницу."""
         response = self.auth_client.get(reverse(
             'posts:post_edit', kwargs={'post_id': self.post.id}))
         self.assertRedirects(response, (reverse(
