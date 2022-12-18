@@ -51,7 +51,7 @@ python3 manage.py createsuperuser
 python3 manage.py runserver
 ```
 
-## Управление проектоа
+## Управление проектом
 ```
 Управление проектом происходит в админке по адресу: http://localhost:8000/admin/
 
